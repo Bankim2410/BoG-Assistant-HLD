@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>BoG Assist — High Level Design</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600&family=Playfair+Display:wght@700;900&display=swap');
+
+  :root {
+    --ink:       #0d0f14;
+    --paper:     #f7f6f2;
+    --dim:       #6b7280;
+    --rule:      #e2e0d8;
+    --aws:       #e47911;
+    --pg:        #336791;
+    --qdrant:    #dc143c;
+    --groq:      #7c3aed;
+    --api:       #0ea5e9;
+    --green:     #16a34a;
+    --yellow:    #ca8a04;
+    --accent:    #1a1a2e;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', sans-serif;
+    --display:   'Playfair Display', serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--paper);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  /* ── HEADER ─────────────────────────────────────────── */
+  header {
+    background: var(--ink);
+    color: var(--paper);
+    padding: 56px 64px 48px;
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute;
+    top: -80px; right: -80px;
+    width: 400px; height: 400px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(220,20,60,0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  header::after {
+    content: '';
+    position: absolute;
+    bottom: -60px; left: 200px;
+    width: 300px; height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(14,165,233,0.1) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .header-eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--qdrant);
+    margin-bottom: 16px;
+  }
+  header h1 {
+    font-family: var(--display);
+    font-size: clamp(36px, 5vw, 64px);
+    font-weight: 900;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+  }
+  header h1 span { color: var(--qdrant); }
+  .header-sub {
+    font-size: 15px;
+    color: #9ca3af;
+    max-width: 560px;
+    line-height: 1.7;
+    margin-bottom: 32px;
+  }
+  .stack-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pill {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 3px;
+    letter-spacing: 0.05em;
+  }
+  .pill-aws   { background: rgba(228,121,17,0.2); color: var(--aws); }
+  .pill-pg    { background: rgba(51,103,145,0.2); color: #60a5fa; }
+  .pill-qd    { background: rgba(220,20,60,0.2);  color: #f87171; }
+  .pill-groq  { background: rgba(124,58,237,0.2); color: #c4b5fd; }
+  .pill-fast  { background: rgba(14,165,233,0.2); color: #7dd3fc; }
+  .pill-react { background: rgba(22,163,74,0.2);  color: #86efac; }
+  .pill-ocr   { background: rgba(202,138,4,0.2);  color: #fde047; }
+
+  /* ── NAV ─────────────────────────────────────────────── */
+  nav {
+    background: white;
+    border-bottom: 1px solid var(--rule);
+    padding: 0 64px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    gap: 0;
+    overflow-x: auto;
+  }
+  nav a {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dim);
+    text-decoration: none;
+    padding: 16px 20px;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  nav a:hover { color: var(--ink); border-color: var(--ink); }
+
+  /* ── LAYOUT ──────────────────────────────────────────── */
+  main { max-width: 1200px; margin: 0 auto; padding: 0 64px 96px; }
+
+  section {
+    padding-top: 72px;
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 8px;
+  }
+  h2 {
+    font-family: var(--display);
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin-bottom: 32px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+
+  /* ── ARCHITECTURE OVERVIEW ───────────────────────────── */
+  .arch-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+  .arch-cell {
+    background: white;
+    padding: 24px;
+  }
+  .arch-cell-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 6px;
+  }
+  .arch-cell-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .arch-cell-desc {
+    font-size: 12px;
+    color: var(--dim);
+    margin-top: 4px;
+    line-height: 1.5;
+  }
+
+  /* ── FLOW DIAGRAM ────────────────────────────────────── */
+  .flow-container {
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 40px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+  }
+
+  .flow-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 32px;
+  }
+
+  /* UPLOAD FLOW */
+  .flow {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    min-width: 900px;
+  }
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+  }
+  .flow-node {
+    width: 100%;
+    max-width: 130px;
+    padding: 12px 10px;
+    border-radius: 6px;
+    text-align: center;
+    position: relative;
+  }
+  .flow-node-icon { font-size: 22px; margin-bottom: 6px; }
+  .flow-node-name {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1.3;
+  }
+  .flow-node-detail {
+    font-size: 10px;
+    margin-top: 4px;
+    line-height: 1.4;
+    opacity: 0.75;
+  }
+
+  .node-user    { background: #f0fdf4; border: 1.5px solid #86efac; }
+  .node-api     { background: #eff6ff; border: 1.5px solid #93c5fd; }
+  .node-ocr     { background: #fffbeb; border: 1.5px solid #fcd34d; }
+  .node-embed   { background: #f5f3ff; border: 1.5px solid #c4b5fd; }
+  .node-s3      { background: #fff7ed; border: 1.5px solid #fdba74; }
+  .node-qdrant  { background: #fff1f2; border: 1.5px solid #fca5a5; }
+  .node-pg      { background: #eff6ff; border: 1.5px solid #93c5fd; }
+  .node-groq    { background: #faf5ff; border: 1.5px solid #d8b4fe; }
+
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    padding-top: 30px;
+    color: var(--dim);
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .arrow-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--dim);
+    margin-top: 6px;
+    text-align: center;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── QUERY FLOW ──────────────────────────────────────── */
+  .query-flow {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    align-items: start;
+    min-width: 800px;
+  }
+
+  .qf-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .qf-node {
+    width: 100%;
+    padding: 12px 8px;
+    border-radius: 6px;
+    text-align: center;
+  }
+  .qf-node-num {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 700;
+    opacity: 0.5;
+    margin-bottom: 4px;
+  }
+  .qf-node-icon { font-size: 18px; margin-bottom: 4px; }
+  .qf-node-name {
+    font-family: var(--mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1.3;
+  }
+  .qf-node-detail { font-size: 9px; opacity: 0.7; margin-top: 3px; line-height: 1.3; }
+
+  .qf-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 28px;
+    color: #9ca3af;
+    font-size: 16px;
+  }
+
+  /* ── PRE-PROCESSING DETAIL ───────────────────────────── */
+  .preprocess-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+  .preprocess-card {
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .pc-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .pc-header-icon { font-size: 18px; }
+  .pc-header-title {
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .pc-header-sub {
+    font-size: 11px;
+    color: var(--dim);
+    font-family: var(--mono);
+  }
+  .pc-body { padding: 20px; }
+  .pc-step {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+    align-items: flex-start;
+  }
+  .pc-step:last-child { margin-bottom: 0; }
+  .pc-step-num {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--ink);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .pc-step-text { font-size: 12px; line-height: 1.6; color: #374151; }
+  .pc-step-text strong { color: var(--ink); font-weight: 600; }
+  .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-weight: 600;
+  }
+  .tag-yellow { background: #fef9c3; color: #854d0e; }
+  .tag-blue   { background: #eff6ff; color: #1e40af; }
+  .tag-red    { background: #fff1f2; color: #9f1239; }
+  .tag-green  { background: #f0fdf4; color: #166534; }
+  .tag-purple { background: #faf5ff; color: #6b21a8; }
+
+  /* ── DATABASE SCHEMAS ────────────────────────────────── */
+  .db-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+  .db-card {
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--rule);
+  }
+  .db-header {
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .db-header-icon { font-size: 20px; }
+  .db-header-info {}
+  .db-header-name { font-size: 13px; font-weight: 700; }
+  .db-header-type { font-family: var(--mono); font-size: 10px; opacity: 0.75; margin-top: 1px; }
+
+  .db-aws    .db-header { background: #fff7ed; border-bottom: 2px solid var(--aws); }
+  .db-pg     .db-header { background: #eff6ff; border-bottom: 2px solid var(--pg); }
+  .db-qdrant .db-header { background: #fff1f2; border-bottom: 2px solid var(--qdrant); }
+
+  .db-table { width: 100%; border-collapse: collapse; }
+  .db-table td {
+    padding: 8px 18px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    font-size: 12px;
+  }
+  .db-table tr:last-child td { border-bottom: none; }
+  .db-table .field-name {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    width: 40%;
+  }
+  .db-table .field-type {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--dim);
+    white-space: nowrap;
+    width: 25%;
+  }
+  .db-table .field-desc {
+    color: #4b5563;
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .db-section-head td {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--dim);
+    background: #fafaf9;
+    padding: 6px 18px;
+    font-weight: 700;
+  }
+  .pk  { color: var(--aws); }
+  .fk  { color: var(--pg); }
+  .key { color: var(--qdrant); }
+
+  /* ── QUERY PARSE TABLE ───────────────────────────────── */
+  .parse-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 24px;
+    font-size: 12px;
+  }
+  .parse-table th {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 10px 16px;
+    text-align: left;
+    font-weight: 600;
+  }
+  .parse-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+    line-height: 1.5;
+  }
+  .parse-table tr:last-child td { border-bottom: none; }
+  .parse-table tr:hover td { background: #fafaf9; }
+  .parse-table td:first-child { font-family: var(--mono); font-size: 11px; font-weight: 600; }
+  .parse-table td:nth-child(2) { color: var(--dim); font-family: var(--mono); font-size: 11px; }
+  .parse-table td:nth-child(3) code {
+    font-family: var(--mono);
+    font-size: 10px;
+    background: #f3f4f6;
+    padding: 2px 6px;
+    border-radius: 3px;
+    color: #374151;
+  }
+
+  /* ── COMPONENT ROLES ─────────────────────────────────── */
+  .roles-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .role-card {
+    background: white;
+    border: 1px solid var(--rule);
+    border-radius: 8px;
+    padding: 20px;
+  }
+  .role-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .role-name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .role-desc { font-size: 12px; color: var(--dim); line-height: 1.6; }
+  .role-bullets { list-style: none; margin-top: 10px; }
+  .role-bullets li {
+    font-size: 11px;
+    color: #4b5563;
+    padding: 3px 0;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .role-bullets li::before { content: '›'; color: var(--dim); font-weight: 700; flex-shrink: 0; }
+
+  /* ── CALLOUT ─────────────────────────────────────────── */
+  .callout {
+    border-left: 3px solid;
+    border-radius: 0 6px 6px 0;
+    padding: 14px 18px;
+    margin: 16px 0;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .callout-info    { border-color: var(--api);   background: #eff6ff; color: #1e40af; }
+  .callout-warn    { border-color: var(--yellow); background: #fefce8; color: #854d0e; }
+  .callout-success { border-color: var(--green);  background: #f0fdf4; color: #166534; }
+  .callout strong  { font-weight: 600; }
+
+  /* ── MONO CODE ───────────────────────────────────────── */
+  .code-block {
+    background: var(--ink);
+    color: #e2e8f0;
+    border-radius: 6px;
+    padding: 20px;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.8;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+  .code-block .cm { color: #6b7280; }
+  .code-block .ck { color: #93c5fd; }
+  .code-block .cv { color: #86efac; }
+  .code-block .cs { color: #fde047; }
+
+  /* ── FOOTER ──────────────────────────────────────────── */
+  footer {
+    background: var(--ink);
+    color: #6b7280;
+    padding: 32px 64px;
+    font-family: var(--mono);
+    font-size: 11px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  footer span { color: var(--paper); }
+
+  /* ── RESPONSIVE ──────────────────────────────────────── */
+  @media (max-width: 900px) {
+    header, main, nav, footer { padding-left: 24px; padding-right: 24px; }
+    .arch-grid, .db-grid, .roles-grid, .preprocess-grid { grid-template-columns: 1fr; }
+    .flow, .query-flow { min-width: 600px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ───────────────────────────────────────── -->
+<header>
+  <div class="header-eyebrow">High Level Design Document</div>
+  <h1>BoG <span>Assistant</span><br/>Architecture</h1>
+  <p class="header-sub">
+    A RAG system for Board of Governors meeting documents.
+    Ingests PDFs via OCR, indexes them in a vector store, and answers
+    natural-language queries using a hosted LLM.
+  </p>
+  <div class="stack-pills">
+    <span class="pill pill-react">React + Vite</span>
+    <span class="pill pill-fast">FastAPI</span>
+    <span class="pill pill-ocr">PaddleOCR</span>
+    <span class="pill pill-groq">Groq LLaMA 3.3</span>
+    <span class="pill pill-aws">AWS S3</span>
+    <span class="pill pill-pg">PostgreSQL</span>
+    <span class="pill pill-qd">Qdrant</span>
+  </div>
+</header>
+
+<!-- ── NAV ──────────────────────────────────────────── -->
+<nav>
+  <a href="#overview">Overview</a>
+  <a href="#upload-flow">Upload Flow</a>
+  <a href="#preprocess">Pre-processing</a>
+  <a href="#query-flow">Query Flow</a>
+  <a href="#query-parse">Query Parsing</a>
+  <a href="#databases">Databases</a>
+  <a href="#components">Components</a>
+  <a href="#payload">Payload Schema</a>
+</nav>
+
+<main>
+
+<!-- ── SECTION 1: OVERVIEW ──────────────────────────── -->
+<section id="overview">
+  <div class="section-label">01 — System Overview</div>
+  <h2>Architecture at a Glance</h2>
+
+  <div class="arch-grid">
+    <div class="arch-cell">
+      <div class="arch-cell-label">Document Store</div>
+      <div class="arch-cell-value">AWS S3</div>
+      <div class="arch-cell-desc">Raw PDFs stored under <code>pdfs/</code> prefix. Source of truth for all meeting documents.</div>
+    </div>
+    <div class="arch-cell">
+      <div class="arch-cell-label">Metadata Store</div>
+      <div class="arch-cell-value">PostgreSQL</div>
+      <div class="arch-cell-desc">Tracks every document and chunk. Enables deduplication, deletion, and document listing.</div>
+    </div>
+    <div class="arch-cell">
+      <div class="arch-cell-label">Vector Store</div>
+      <div class="arch-cell-value">Qdrant</div>
+      <div class="arch-cell-desc">384-dim cosine vectors from all-MiniLM-L6-v2. Used for semantic similarity search at query time.</div>
+    </div>
+    <div class="arch-cell">
+      <div class="arch-cell-label">Embedding Model</div>
+      <div class="arch-cell-value">all-MiniLM-L6-v2</div>
+      <div class="arch-cell-desc">Sentence Transformers model. Runs locally on the API server. No external API call needed.</div>
+    </div>
+    <div class="arch-cell">
+      <div class="arch-cell-label">LLM</div>
+      <div class="arch-cell-value">Groq / LLaMA 3.3 70B</div>
+      <div class="arch-cell-desc">Hosted inference via Groq API. Receives retrieved context + query; generates final answer.</div>
+    </div>
+    <div class="arch-cell">
+      <div class="arch-cell-label">OCR Engine</div>
+      <div class="arch-cell-value">PaddleOCR</div>
+      <div class="arch-cell-desc">Rasterises each PDF page and extracts text. Handles scanned and digital PDFs uniformly.</div>
+    </div>
+  </div>
+
+  <div class="callout callout-info">
+    <strong>Incremental by design.</strong> The embedding pipeline checks PostgreSQL before processing any file.
+    Already-embedded documents are skipped — re-running <code>create_vector_embedding.py</code> is always safe.
+  </div>
+</section>
+
+<!-- ── SECTION 2: UPLOAD FLOW ───────────────────────── -->
+<section id="upload-flow">
+  <div class="section-label">02 — Document Ingestion</div>
+  <h2>Upload Flow (End-to-End)</h2>
+
+  <div class="flow-container">
+    <div class="flow-title">► API Upload Path: POST /documents</div>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-node node-user">
+          <div class="flow-node-icon">👤</div>
+          <div class="flow-node-name">User / Admin</div>
+          <div class="flow-node-detail">Sends PDF via multipart/form-data</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-node node-api">
+          <div class="flow-node-icon">⚡</div>
+          <div class="flow-node-name">FastAPI<br/>POST /documents</div>
+          <div class="flow-node-detail">Validates .pdf, checks duplicate in PG</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-node node-s3">
+          <div class="flow-node-icon">🪣</div>
+          <div class="flow-node-name">AWS S3</div>
+          <div class="flow-node-detail">Stores raw bytes at pdfs/{filename}</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-node node-ocr">
+          <div class="flow-node-icon">🔍</div>
+          <div class="flow-node-name">PaddleOCR</div>
+          <div class="flow-node-detail">Page rasterise → text per page</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-node node-embed">
+          <div class="flow-node-icon">🧮</div>
+          <div class="flow-node-name">MiniLM Embedder</div>
+          <div class="flow-node-detail">384-dim vector per chunk</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-node node-qdrant">
+          <div class="flow-node-icon">🎯</div>
+          <div class="flow-node-name">Qdrant</div>
+          <div class="flow-node-detail">Upsert vectors + payloads</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-node node-pg">
+          <div class="flow-node-icon">🐘</div>
+          <div class="flow-node-name">PostgreSQL</div>
+          <div class="flow-node-detail">documents + chunks rows inserted</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow-container">
+    <div class="flow-title">► Bulk Pipeline Path: python create_vector_embedding.py</div>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-node node-s3">
+          <div class="flow-node-icon">🪣</div>
+          <div class="flow-node-name">S3 List<br/>pdfs/*</div>
+          <div class="flow-node-detail">Enumerate all PDFs in bucket</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-node node-pg">
+          <div class="flow-node-icon">🐘</div>
+          <div class="flow-node-name">PG Check<br/>documents</div>
+          <div class="flow-node-detail">Skip if filename exists</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-node node-s3">
+          <div class="flow-node-icon">⬇️</div>
+          <div class="flow-node-name">S3 Download<br/>temp file</div>
+          <div class="flow-node-detail">Stream to /tmp/</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-node node-ocr">
+          <div class="flow-node-icon">🔍</div>
+          <div class="flow-node-name">OCR +<br/>Chunk</div>
+          <div class="flow-node-detail">One chunk per page, min 50 chars</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-node node-embed">
+          <div class="flow-node-icon">🧮</div>
+          <div class="flow-node-name">Batch<br/>Embed</div>
+          <div class="flow-node-detail">All page texts in one batch</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-node node-qdrant">
+          <div class="flow-node-icon">🎯</div>
+          <div class="flow-node-name">Qdrant<br/>Upsert</div>
+          <div class="flow-node-detail">UUID per point + payload</div>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-node node-pg">
+          <div class="flow-node-icon">🐘</div>
+          <div class="flow-node-name">PG Insert<br/>+ Cleanup</div>
+          <div class="flow-node-detail">doc + chunk rows; delete /tmp</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 3: PRE-PROCESSING ────────────────────── -->
+<section id="preprocess">
+  <div class="section-label">03 — Pre-processing Detail</div>
+  <h2>What Happens Before a Chunk Reaches Qdrant</h2>
+
+  <div class="preprocess-grid">
+
+    <div class="preprocess-card">
+      <div class="pc-header">
+        <div class="pc-header-icon">📄</div>
+        <div>
+          <div class="pc-header-title">PDF → Page Rasterisation</div>
+          <div class="pc-header-sub">PyMuPDF + PaddleOCR</div>
+        </div>
+      </div>
+      <div class="pc-body">
+        <div class="pc-step">
+          <div class="pc-step-num">1</div>
+          <div class="pc-step-text"><strong>Open PDF</strong> with <code>fitz.open()</code> (PyMuPDF). Iterate over every page.</div>
+        </div>
+        <div class="pc-step">
+          <div class="pc-step-num">2</div>
+          <div class="pc-step-text"><strong>Rasterise page</strong> to a pixel map via <code>page.get_pixmap()</code>. Converts to numpy array (H×W×N).</div>
+        </div>
+        <div class="pc-step">
+          <div class="pc-step-num">3</div>
+          <div class="pc-step-text"><strong>PaddleOCR</strong> runs <span class="tag tag-yellow">use_angle_cls=True</span> to handle rotated text. Returns bounding boxes + confidence scores.</div>
+        </div>
+        <div class="pc-step">
+          <div class="pc-step-num">4</div>
+          <div class="pc-step-text"><strong>Concatenate</strong> all word strings per page into a single text blob.</div>
+        </div>
+        <div class="pc-step">
+          <div class="pc-step-num">5</div>
+          <div class="pc-step-text"><strong>Filter</strong>: skip pages with &lt;50 characters (blank, section dividers, image-only pages).</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preprocess-card">
+      <div class="pc-header">
+        <div class="pc-header-icon">🔖</div>
+        <div>
+          <div class="pc-header-title">Metadata Extraction</div>
+          <div class="pc-header-sub">Regex on filename + page text</div>
+        </div>
+      </div>
+      <div class="pc-body">
+        <div class="pc-step">
+          <div class="pc-step-num">1</div>
+          <div class="pc-step-text"><strong>meeting_no</strong> — extracted from filename using <span class="tag tag-blue">r"\d{1,3}(?:st|nd|rd|th)"</span>. E.g. "45th_BoG.pdf" → <code>"45"</code>.</div>
+        </div>
+        <div class="pc-step">
+          <div class="pc-step-num">2</div>
+          <div class="pc-step-text"><strong>item_no</strong> — extracted from page text using <span class="tag tag-blue">r"\d+\.\d+"</span>. E.g. "Item 3.2" → <code>"3.2"</code>. Used for agenda filtering.</div>
+        </div>
+        <div class="pc-step">
+          <div class="pc-step-num">3</div>
+          <div class="pc-step-text"><strong>page</strong> — zero-indexed page number from PyMuPDF iterator.</div>
+        </div>
+        <div class="pc-step">
+          <div class="pc-step-num">4</div>
+          <div class="pc-step-text"><strong>source</strong> — original filename. Stored in payload for traceability.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preprocess-card">
+      <div class="pc-header">
+        <div class="pc-header-icon">🧹</div>
+        <div>
+          <div class="pc-header-title">Text Normalisation</div>
+          <div class="pc-header-sub">Before embedding</div>
+        </div>
+      </div>
+      <div class="pc-body">
+        <div class="pc-step">
+          <div class="pc-step-num">1</div>
+          <div class="pc-step-text"><strong>Whitespace collapse</strong> — <span class="tag tag-purple">re.sub(r"\s+", " ", text).strip()</span> removes tabs, newlines, double spaces.</div>
+        </div>
+        <div class="pc-step">
+          <div class="pc-step-num">2</div>
+          <div class="pc-step-text"><strong>Context prefix</strong> prepended: <code>Meeting: {no}\nPage: {n}\n{text}</code>. Improves retrieval accuracy by baking meeting context into the embedding.</div>
+        </div>
+        <div class="pc-step">
+          <div class="pc-step-num">3</div>
+          <div class="pc-step-text"><strong>No chunking beyond pages</strong> — each page is one chunk. Keeps context windows intact for BoG-style documents.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="preprocess-card">
+      <div class="pc-header">
+        <div class="pc-header-icon">🧮</div>
+        <div>
+          <div class="pc-header-title">Embedding + Upsert</div>
+          <div class="pc-header-sub">sentence-transformers → Qdrant</div>
+        </div>
+      </div>
+      <div class="pc-body">
+        <div class="pc-step">
+          <div class="pc-step-num">1</div>
+          <div class="pc-step-text"><strong>Batch encode</strong> all page texts for a single document in one call. <span class="tag tag-green">normalize_embeddings=True</span> — L2 normalised for cosine similarity.</div>
+        </div>
+        <div class="pc-step">
+          <div class="pc-step-num">2</div>
+          <div class="pc-step-text"><strong>UUID per point</strong> — each chunk gets a <code>uuid4()</code> string. Stored in Qdrant as the point ID and in PostgreSQL <code>chunks.qdrant_id</code>.</div>
+        </div>
+        <div class="pc-step">
+          <div class="pc-step-num">3</div>
+          <div class="pc-step-text"><strong>Qdrant upsert</strong> — vector + full payload in one call. Collection uses <span class="tag tag-red">Cosine</span> distance, 384 dimensions.</div>
+        </div>
+        <div class="pc-step">
+          <div class="pc-step-num">4</div>
+          <div class="pc-step-text"><strong>PostgreSQL write</strong> — one <code>documents</code> row + N <code>chunks</code> rows after successful Qdrant upsert.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="callout callout-warn">
+    <strong>OCR failure handling:</strong> If PaddleOCR throws an exception on a page (corrupt raster, all-black scan), the page returns an empty string and is silently skipped — it does not crash the pipeline.
+  </div>
+</section>
+
+<!-- ── SECTION 4: QUERY FLOW ────────────────────────── -->
+<section id="query-flow">
+  <div class="section-label">04 — Query Path</div>
+  <h2>Query Flow (End-to-End)</h2>
+
+  <div class="flow-container">
+    <div class="flow-title">► POST /query — full journey</div>
+    <div class="query-flow">
+
+      <div class="qf-step">
+        <div class="qf-node node-user">
+          <div class="qf-node-num">01</div>
+          <div class="qf-node-icon">💬</div>
+          <div class="qf-node-name">User Query</div>
+          <div class="qf-node-detail">Natural language question from React UI</div>
+        </div>
+      </div>
+      <div class="qf-arrow">→</div>
+
+      <div class="qf-step">
+        <div class="qf-node node-api">
+          <div class="qf-node-num">02</div>
+          <div class="qf-node-icon">⚡</div>
+          <div class="qf-node-name">FastAPI<br/>/query</div>
+          <div class="qf-node-detail">Passes to RAGHandler.handle_input()</div>
+        </div>
+      </div>
+      <div class="qf-arrow">→</div>
+
+      <div class="qf-step">
+        <div class="qf-node node-ocr" style="background:#fdf4ff;border-color:#e9d5ff;">
+          <div class="qf-node-num">03</div>
+          <div class="qf-node-icon">🧠</div>
+          <div class="qf-node-name">Query<br/>Parser</div>
+          <div class="qf-node-detail">Regex routing: agenda/latest/single/multi/global</div>
+        </div>
+      </div>
+      <div class="qf-arrow">→</div>
+
+      <div class="qf-step">
+        <div class="qf-node node-embed">
+          <div class="qf-node-num">04</div>
+          <div class="qf-node-icon">🔎</div>
+          <div class="qf-node-name">Filter +<br/>Search</div>
+          <div class="qf-node-detail">In-memory filter OR Qdrant vector search</div>
+        </div>
+      </div>
+      <div class="qf-arrow">→</div>
+
+      <div class="qf-step">
+        <div class="qf-node node-qdrant">
+          <div class="qf-node-num">05</div>
+          <div class="qf-node-icon">📊</div>
+          <div class="qf-node-name">Score +<br/>Re-rank</div>
+          <div class="qf-node-detail">Keyword boosting + domain word scoring</div>
+        </div>
+      </div>
+      <div class="qf-arrow">→</div>
+
+      <div class="qf-step">
+        <div class="qf-node node-groq">
+          <div class="qf-node-num">06</div>
+          <div class="qf-node-icon">🤖</div>
+          <div class="qf-node-name">Groq<br/>LLaMA 3.3</div>
+          <div class="qf-node-detail">Top-30 chunks as context, prompt + answer</div>
+        </div>
+      </div>
+      <div class="qf-arrow">→</div>
+
+      <div class="qf-step">
+        <div class="qf-node node-user">
+          <div class="qf-node-num">07</div>
+          <div class="qf-node-icon">✅</div>
+          <div class="qf-node-name">Answer<br/>returned</div>
+          <div class="qf-node-detail">JSON: {text, answer, response, status}</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="callout callout-success">
+    <strong>In-memory cache:</strong> On startup, <code>RAGHandler</code> calls <code>qdrant_store.scroll_all()</code> and caches all chunk payloads in RAM. Filtered queries (agenda, latest, single, multi) never hit Qdrant — they run against this cache instantly. Only global similarity queries hit Qdrant's ANN index.
+  </div>
+</section>
+
+<!-- ── SECTION 5: QUERY PARSING ─────────────────────── -->
+<section id="query-parse">
+  <div class="section-label">05 — Query Intelligence</div>
+  <h2>Query Parsing & Routing Logic</h2>
+
+  <table class="parse-table">
+    <thead>
+      <tr>
+        <th>Route Type</th>
+        <th>Trigger</th>
+        <th>Example Query</th>
+        <th>Filter Applied</th>
+        <th>Search Method</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>agenda</td>
+        <td>Regex finds <code>\d+\.\d+</code></td>
+        <td>"What happened in item 3.2?"</td>
+        <td><code>item_no == "3.2"</code> (in-memory)</td>
+        <td>In-memory exact match, fallback substring</td>
+      </tr>
+      <tr>
+        <td>latest</td>
+        <td>"latest" / "last" / "recent"</td>
+        <td>"What was discussed in the latest meeting?"</td>
+        <td><code>meeting_no == max(all)</code></td>
+        <td>In-memory filter after computing max</td>
+      </tr>
+      <tr>
+        <td>single</td>
+        <td>Exactly one number in query</td>
+        <td>"Summary of 45th meeting"</td>
+        <td><code>meeting_no == "45"</code></td>
+        <td>In-memory filter</td>
+      </tr>
+      <tr>
+        <td>multi</td>
+        <td>Two or more numbers</td>
+        <td>"Compare meetings 44 and 45"</td>
+        <td><code>meeting_no IN ["44","45"]</code></td>
+        <td>In-memory union filter</td>
+      </tr>
+      <tr>
+        <td>global</td>
+        <td>No numbers, no agenda, no recency</td>
+        <td>"Who chairs the finance committee?"</td>
+        <td>None</td>
+        <td>Qdrant ANN vector search (top_k=50)</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div style="background:white;border:1px solid var(--rule);border-radius:8px;padding:24px;margin-bottom:16px;">
+    <h3 style="margin-bottom:16px;">Re-ranking after Filter</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+      <div>
+        <div class="section-label" style="margin-bottom:8px;">Scoring Formula</div>
+        <div class="code-block">
+<span class="cm"># For each candidate doc:</span>
+score = 0
+
+<span class="cm"># +2 for each query word found</span>
+score += sum(<span class="cv">2</span> <span class="ck">for</span> w <span class="ck">in</span> q_words
+             <span class="ck">if</span> w <span class="ck">in</span> text)
+
+<span class="cm"># +5 for domain keyword match</span>
+DOMAIN = [<span class="cs">"phd"</span>, <span class="cs">"finance"</span>,
+          <span class="cs">"academic"</span>, <span class="cs">"infrastructure"</span>]
+score += sum(<span class="cv">5</span> <span class="ck">for</span> w <span class="ck">in</span> DOMAIN
+             <span class="ck">if</span> w <span class="ck">in</span> query <span class="ck">and</span> w <span class="ck">in</span> text)
+
+<span class="cm"># Top 30 by score sent to LLM</span>
+        </div>
+      </div>
+      <div>
+        <div class="section-label" style="margin-bottom:8px;">LLM Prompt Structure</div>
+        <div class="code-block">
+<span class="cm"># System prompt instructs LLM to:</span>
+<span class="cs">"Answer using context below."</span>
+<span class="cs">"- Extract exact facts"</span>
+<span class="cs">"- Count properly if required"</span>
+<span class="cs">"- Combine multiple chunks"</span>
+
+<span class="cm"># Context: top-30 chunks</span>
+<span class="cm"># (max 1000 chars each)</span>
+
+<span class="cm"># Model: llama-3.3-70b-versatile</span>
+<span class="cm"># via Groq hosted inference</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 6: DATABASES ─────────────────────────── -->
+<section id="databases">
+  <div class="section-label">06 — Data Stores</div>
+  <h2>Database Schemas & Fields</h2>
+
+  <div class="db-grid">
+
+    <!-- S3 -->
+    <div class="db-card db-aws">
+      <div class="db-header">
+        <div class="db-header-icon">🪣</div>
+        <div class="db-header-info">
+          <div class="db-header-name">AWS S3</div>
+          <div class="db-header-type">Object Storage — Raw PDFs</div>
+        </div>
+      </div>
+      <table class="db-table">
+        <tr class="db-section-head"><td colspan="3">Object Structure</td></tr>
+        <tr>
+          <td class="field-name">Bucket</td>
+          <td class="field-type">string</td>
+          <td class="field-desc">Configured via <code>S3_BUCKET_NAME</code> env var</td>
+        </tr>
+        <tr>
+          <td class="field-name">Key prefix</td>
+          <td class="field-type">path</td>
+          <td class="field-desc">Always <code>pdfs/{filename}</code></td>
+        </tr>
+        <tr>
+          <td class="field-name">Body</td>
+          <td class="field-type">bytes</td>
+          <td class="field-desc">Raw PDF binary content</td>
+        </tr>
+        <tr class="db-section-head"><td colspan="3">Access Patterns</td></tr>
+        <tr>
+          <td class="field-name">put_object</td>
+          <td class="field-type">WRITE</td>
+          <td class="field-desc">On upload (API or bulk script)</td>
+        </tr>
+        <tr>
+          <td class="field-name">download_file</td>
+          <td class="field-type">READ</td>
+          <td class="field-desc">During embedding pipeline to temp path</td>
+        </tr>
+        <tr>
+          <td class="field-name">list_objects_v2</td>
+          <td class="field-type">LIST</td>
+          <td class="field-desc">Enumerate all PDFs for bulk processing</td>
+        </tr>
+        <tr>
+          <td class="field-name">presigned URL</td>
+          <td class="field-type">TEMP</td>
+          <td class="field-desc">Generate expiring download links (1hr)</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- PostgreSQL -->
+    <div class="db-card db-pg">
+      <div class="db-header">
+        <div class="db-header-icon">🐘</div>
+        <div class="db-header-info">
+          <div class="db-header-name">PostgreSQL</div>
+          <div class="db-header-type">Relational — Metadata & Deduplication</div>
+        </div>
+      </div>
+      <table class="db-table">
+        <tr class="db-section-head"><td colspan="3">Table: documents</td></tr>
+        <tr>
+          <td class="field-name pk">id</td>
+          <td class="field-type">SERIAL PK</td>
+          <td class="field-desc">Auto-increment primary key</td>
+        </tr>
+        <tr>
+          <td class="field-name">filename</td>
+          <td class="field-type">TEXT UNIQUE</td>
+          <td class="field-desc">Original PDF filename — deduplication key</td>
+        </tr>
+        <tr>
+          <td class="field-name">s3_key</td>
+          <td class="field-type">TEXT</td>
+          <td class="field-desc">Full S3 key e.g. <code>pdfs/45th_BoG.pdf</code></td>
+        </tr>
+        <tr>
+          <td class="field-name">meeting_no</td>
+          <td class="field-type">TEXT</td>
+          <td class="field-desc">Extracted meeting number e.g. "45"</td>
+        </tr>
+        <tr>
+          <td class="field-name">uploaded_at</td>
+          <td class="field-type">TIMESTAMPTZ</td>
+          <td class="field-desc">Auto-set to NOW() on insert</td>
+        </tr>
+        <tr class="db-section-head"><td colspan="3">Table: chunks</td></tr>
+        <tr>
+          <td class="field-name pk">id</td>
+          <td class="field-type">SERIAL PK</td>
+          <td class="field-desc">Auto-increment primary key</td>
+        </tr>
+        <tr>
+          <td class="field-name fk">document_id</td>
+          <td class="field-type">INT FK</td>
+          <td class="field-desc">References <code>documents.id</code> — CASCADE DELETE</td>
+        </tr>
+        <tr>
+          <td class="field-name">qdrant_id</td>
+          <td class="field-type">TEXT</td>
+          <td class="field-desc">UUID of the matching Qdrant point</td>
+        </tr>
+        <tr>
+          <td class="field-name">page</td>
+          <td class="field-type">INTEGER</td>
+          <td class="field-desc">Zero-indexed page number in the PDF</td>
+        </tr>
+        <tr>
+          <td class="field-name">item_no</td>
+          <td class="field-type">TEXT</td>
+          <td class="field-desc">Agenda item if found on this page (nullable)</td>
+        </tr>
+        <tr>
+          <td class="field-name">created_at</td>
+          <td class="field-type">TIMESTAMPTZ</td>
+          <td class="field-desc">Auto-set to NOW() on insert</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Qdrant -->
+    <div class="db-card db-qdrant">
+      <div class="db-header">
+        <div class="db-header-icon">🎯</div>
+        <div class="db-header-info">
+          <div class="db-header-name">Qdrant</div>
+          <div class="db-header-type">Vector Store — Embeddings & Payload</div>
+        </div>
+      </div>
+      <table class="db-table">
+        <tr class="db-section-head"><td colspan="3">Collection: bog_documents</td></tr>
+        <tr>
+          <td class="field-name key">id</td>
+          <td class="field-type">UUID string</td>
+          <td class="field-desc">Generated uuid4 per chunk. Same value stored in PG chunks.qdrant_id</td>
+        </tr>
+        <tr>
+          <td class="field-name">vector</td>
+          <td class="field-type">float[384]</td>
+          <td class="field-desc">L2-normalised MiniLM embedding of chunk text</td>
+        </tr>
+        <tr class="db-section-head"><td colspan="3">Payload Fields (per point)</td></tr>
+        <tr>
+          <td class="field-name">page_content</td>
+          <td class="field-type">string</td>
+          <td class="field-desc">Full normalised text of the page chunk</td>
+        </tr>
+        <tr>
+          <td class="field-name">source</td>
+          <td class="field-type">string</td>
+          <td class="field-desc">Original PDF filename for traceability</td>
+        </tr>
+        <tr>
+          <td class="field-name">meeting_no</td>
+          <td class="field-type">string | null</td>
+          <td class="field-desc">Meeting number for payload filtering</td>
+        </tr>
+        <tr>
+          <td class="field-name">item_no</td>
+          <td class="field-type">string | null</td>
+          <td class="field-desc">Agenda item number if found on page</td>
+        </tr>
+        <tr>
+          <td class="field-name">page</td>
+          <td class="field-type">integer</td>
+          <td class="field-desc">Zero-indexed page number</td>
+        </tr>
+        <tr class="db-section-head"><td colspan="3">Collection Config</td></tr>
+        <tr>
+          <td class="field-name">distance</td>
+          <td class="field-type">enum</td>
+          <td class="field-desc">COSINE — optimised for normalised embeddings</td>
+        </tr>
+        <tr>
+          <td class="field-name">size</td>
+          <td class="field-type">integer</td>
+          <td class="field-desc">384 — all-MiniLM-L6-v2 output dimension</td>
+        </tr>
+      </table>
+    </div>
+
+  </div>
+
+  <div class="callout callout-info">
+    <strong>Delete cascade:</strong> Deleting a document via <code>DELETE /documents/{id}</code> removes the Qdrant points by UUID list, then deletes the PostgreSQL <code>documents</code> row (which cascades to <code>chunks</code>). The S3 object is intentionally preserved as a backup — call <code>s3_storage.delete_file(filename)</code> manually if permanent removal is needed.
+  </div>
+</section>
+
+<!-- ── SECTION 7: COMPONENTS ────────────────────────── -->
+<section id="components">
+  <div class="section-label">07 — Component Responsibilities</div>
+  <h2>What Each Module Owns</h2>
+
+  <div class="roles-grid">
+    <div class="role-card">
+      <div class="role-name">
+        <span class="role-dot" style="background:var(--api)"></span>api.py
+      </div>
+      <div class="role-desc">FastAPI application. HTTP surface of the system — all external requests enter here.</div>
+      <ul class="role-bullets">
+        <li>Startup: initialises DB, Qdrant collection, OCR, embedder, RAG handler</li>
+        <li>POST /documents — validates, uploads to S3, OCRs, embeds, writes PG</li>
+        <li>POST /query — delegates entirely to RAGHandler</li>
+        <li>GET /documents — reads from PostgreSQL documents table</li>
+        <li>DELETE /documents/{id} — orchestrates Qdrant + PG cleanup</li>
+        <li>GET /health — returns Qdrant collection stats</li>
+      </ul>
+    </div>
+    <div class="role-card">
+      <div class="role-name">
+        <span class="role-dot" style="background:var(--groq)"></span>rag_query_handler.py
+      </div>
+      <div class="role-desc">All query intelligence lives here. Stateful: holds in-memory payload cache on init.</div>
+      <ul class="role-bullets">
+        <li>Loads all Qdrant payloads into RAM at startup via scroll_all()</li>
+        <li>_parse_query(): regex routing to 5 query types</li>
+        <li>_filter_docs(): applies the correct filter to the in-memory cache</li>
+        <li>_score_docs(): keyword + domain word re-ranking</li>
+        <li>Sends top-30 chunks as context to Groq LLaMA 3.3</li>
+        <li>Refreshes in-memory cache after new uploads</li>
+      </ul>
+    </div>
+    <div class="role-card">
+      <div class="role-name">
+        <span class="role-dot" style="background:var(--qdrant)"></span>qdrant_store.py
+      </div>
+      <div class="role-desc">Thin wrapper around QdrantClient. Handles all vector operations.</div>
+      <ul class="role-bullets">
+        <li>ensure_collection(): idempotent collection creation</li>
+        <li>upsert_points(): generates UUIDs, wraps PointStruct, batch upserts</li>
+        <li>similarity_search(): query_points() for client >= 1.7, search() fallback</li>
+        <li>scroll_all(): bulk payload fetch for in-memory cache</li>
+        <li>delete_by_ids(): remove points by UUID list</li>
+        <li>collection_info(): stats for health endpoint</li>
+      </ul>
+    </div>
+    <div class="role-card">
+      <div class="role-name">
+        <span class="role-dot" style="background:var(--pg)"></span>db.py
+      </div>
+      <div class="role-desc">All PostgreSQL operations via psycopg2. Schema initialisation and CRUD.</div>
+      <ul class="role-bullets">
+        <li>init_db(): CREATE TABLE IF NOT EXISTS for documents + chunks</li>
+        <li>insert_document(): upsert on filename conflict</li>
+        <li>document_exists(): deduplication check before processing</li>
+        <li>insert_chunks(): batch insert chunk rows</li>
+        <li>get_qdrant_ids_for_document(): lookup before deletion</li>
+        <li>delete_document(): cascades to chunks via FK</li>
+      </ul>
+    </div>
+    <div class="role-card">
+      <div class="role-name">
+        <span class="role-dot" style="background:var(--aws)"></span>s3_storage.py
+      </div>
+      <div class="role-desc">All AWS S3 operations via boto3. Handles both file-path and bytes-based uploads.</div>
+      <ul class="role-bullets">
+        <li>upload_bytes(): direct bytes upload (API upload path)</li>
+        <li>upload_file(): local path upload (bulk script path)</li>
+        <li>download_to_path(): stream to temp file for OCR</li>
+        <li>list_pdfs(): paginated listing under pdfs/ prefix</li>
+        <li>file_exists(): head_object check</li>
+        <li>presigned_url(): generate time-limited download URLs</li>
+      </ul>
+    </div>
+    <div class="role-card">
+      <div class="role-name">
+        <span class="role-dot" style="background:var(--yellow)"></span>create_vector_embedding.py
+      </div>
+      <div class="role-desc">Offline bulk pipeline. Run once before deployment to seed the vector store.</div>
+      <ul class="role-bullets">
+        <li>Lists all PDFs in S3 via s3_storage.list_pdfs()</li>
+        <li>Skips already-processed files via db.document_exists()</li>
+        <li>Downloads each PDF to /tmp/, OCRs, embeds, cleans up</li>
+        <li>Writes to Qdrant + PostgreSQL after successful processing</li>
+        <li>Progress bar via tqdm, incremental — safe to re-run</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ── SECTION 8: PAYLOAD SCHEMA ─────────────────────── -->
+<section id="payload">
+  <div class="section-label">08 — Payload & Response Schema</div>
+  <h2>API Contracts</h2>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;">
+    <div>
+      <h3 style="margin-bottom:12px;">POST /query — Request & Response</h3>
+      <div class="code-block">
+<span class="cm">// Request body</span>
+{
+  <span class="ck">"query"</span>: <span class="cs">"What was decided in meeting 45?"</span>,
+  <span class="ck">"top_k"</span>: <span class="cv">10</span>   <span class="cm">// optional, default 10</span>
+}
+
+<span class="cm">// Response body</span>
+{
+  <span class="ck">"text"</span>:     <span class="cs">"&lt;LLM answer string&gt;"</span>,
+  <span class="ck">"answer"</span>:   <span class="cs">"&lt;same&gt;"</span>,
+  <span class="ck">"response"</span>: <span class="cs">"&lt;same&gt;"</span>,
+  <span class="ck">"message"</span>:  { <span class="ck">"text"</span>: <span class="cs">"&lt;same&gt;"</span> },
+  <span class="ck">"status"</span>:   <span class="cs">"success"</span> | <span class="cs">"error"</span>
+}
+      </div>
+    </div>
+
+    <div>
+      <h3 style="margin-bottom:12px;">POST /documents — Response</h3>
+      <div class="code-block">
+<span class="cm">// multipart/form-data, field: "file"</span>
+<span class="cm">// Only .pdf accepted</span>
+
+<span class="cm">// Success response</span>
+{
+  <span class="ck">"status"</span>:   <span class="cs">"success"</span>,
+  <span class="ck">"filename"</span>: <span class="cs">"45th_BoG.pdf"</span>,
+  <span class="ck">"chunks"</span>:   <span class="cv">38</span>,      <span class="cm">// pages embedded</span>
+  <span class="ck">"doc_id"</span>:   <span class="cv">7</span>        <span class="cm">// PostgreSQL row id</span>
+}
+
+<span class="cm">// 409 if already processed</span>
+<span class="cm">// 422 if no text extracted</span>
+      </div>
+    </div>
+
+    <div>
+      <h3 style="margin-bottom:12px;">GET /documents — Response</h3>
+      <div class="code-block">
+{
+  <span class="ck">"documents"</span>: [
+    {
+      <span class="ck">"id"</span>:          <span class="cv">7</span>,
+      <span class="ck">"filename"</span>:    <span class="cs">"45th_BoG.pdf"</span>,
+      <span class="ck">"s3_key"</span>:      <span class="cs">"pdfs/45th_BoG.pdf"</span>,
+      <span class="ck">"meeting_no"</span>:  <span class="cs">"45"</span>,
+      <span class="ck">"uploaded_at"</span>: <span class="cs">"2025-08-17T..."</span>
+    }
+  ]
+}
+      </div>
+    </div>
+
+    <div>
+      <h3 style="margin-bottom:12px;">Qdrant Point Payload</h3>
+      <div class="code-block">
+<span class="cm">// Stored alongside every 384-dim vector</span>
+{
+  <span class="ck">"page_content"</span>: <span class="cs">"Meeting: 45\nPage: 3\n..."</span>,
+  <span class="ck">"source"</span>:       <span class="cs">"45th_BoG.pdf"</span>,
+  <span class="ck">"meeting_no"</span>:   <span class="cs">"45"</span>,
+  <span class="ck">"item_no"</span>:      <span class="cs">"3.2"</span> | <span class="cv">null</span>,
+  <span class="ck">"page"</span>:         <span class="cv">3</span>
+}
+      </div>
+    </div>
+  </div>
+
+  <div class="callout callout-success" style="margin-top:24px;">
+    <strong>End-to-end delete contract:</strong>
+    <code>DELETE /documents/{id}</code> →
+    fetch <code>chunks.qdrant_id</code> list from PG →
+    <code>qdrant_store.delete_by_ids()</code> →
+    <code>db.delete_document(id)</code> (cascades chunks) →
+    refresh <code>rag_handler.all_docs</code> in-memory cache.
+    The next query sees consistent state without a restart.
+  </div>
+</section>
+
+</main>
+
+<!-- ── FOOTER ────────────────────────────────────────── -->
+<footer>
+  <div>BoG Assist — High Level Design &nbsp;</div>
+  <div>S3 · PostgreSQL · Qdrant · Groq LLaMA 3.3 · FastAPI · React</div>
+</footer>
+
+</body>
+</html>
