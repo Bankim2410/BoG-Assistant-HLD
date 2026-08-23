@@ -954,10 +954,6 @@
 
     </div>
   </div>
-
-  <div class="callout callout-success">
-    <strong>In-memory cache:</strong> On startup, <code>RAGHandler</code> calls <code>qdrant_store.scroll_all()</code> and caches all chunk payloads in RAM. Filtered queries (agenda, latest, single, multi) never hit Qdrant — they run against this cache instantly. Only global similarity queries hit Qdrant's ANN index.
-  </div>
 </section>
 
 <!-- ── SECTION 5: QUERY PARSING ─────────────────────── -->
