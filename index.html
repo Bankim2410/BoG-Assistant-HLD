@@ -843,14 +843,14 @@
       <div class="pc-header">
         <div class="pc-header-icon">🧮</div>
         <div>
-          <div class="pc-header-title">Embedding + Upsert</div>
+          <div class="pc-header-title">Embedding</div>
           <div class="pc-header-sub">sentence-transformers → Qdrant</div>
         </div>
       </div>
       <div class="pc-body">
         <div class="pc-step">
           <div class="pc-step-num">1</div>
-          <div class="pc-step-text"><strong>Batch encode</strong> all page texts for a single document in one call. <span class="tag tag-green">normalize_embeddings=True</span> — L2 normalised for cosine similarity.</div>
+          <div class="pc-step-text"><strong>Batch encode</strong> all page texts for a single document in one call.</div>
         </div>
         <div class="pc-step">
           <div class="pc-step-num">2</div>
@@ -858,7 +858,7 @@
         </div>
         <div class="pc-step">
           <div class="pc-step-num">3</div>
-          <div class="pc-step-text"><strong>Qdrant upsert</strong> — vector + full payload in one call. Collection uses <span class="tag tag-red">Cosine</span> distance, 384 dimensions.</div>
+          <div class="pc-step-text"><strong>Qdrant insert</strong> — vector of 384 dimensions is inserted in the Qdrant.</div>
         </div>
         <div class="pc-step">
           <div class="pc-step-num">4</div>
