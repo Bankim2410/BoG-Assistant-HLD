@@ -705,7 +705,7 @@
         <div class="flow-node node-api">
           <div class="flow-node-icon">⚡</div>
           <div class="flow-node-name">FastAPI<br/>POST /documents</div>
-          <div class="flow-node-detail">Validates .pdf, checks duplicate in PG</div>
+          <div class="flow-node-detail">Checks duplicate in PG</div>
         </div>
       </div>
       <div class="flow-arrow">→</div>
@@ -746,67 +746,6 @@
           <div class="flow-node-icon">🐘</div>
           <div class="flow-node-name">PostgreSQL</div>
           <div class="flow-node-detail">documents + chunks rows inserted</div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="flow-container">
-    <div class="flow-title">► Bulk Pipeline Path: python create_vector_embedding.py</div>
-    <div class="flow">
-      <div class="flow-step">
-        <div class="flow-node node-s3">
-          <div class="flow-node-icon">🪣</div>
-          <div class="flow-node-name">S3 List<br/>pdfs/*</div>
-          <div class="flow-node-detail">Enumerate all PDFs in bucket</div>
-        </div>
-      </div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-step">
-        <div class="flow-node node-pg">
-          <div class="flow-node-icon">🐘</div>
-          <div class="flow-node-name">PG Check<br/>documents</div>
-          <div class="flow-node-detail">Skip if filename exists</div>
-        </div>
-      </div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-step">
-        <div class="flow-node node-s3">
-          <div class="flow-node-icon">⬇️</div>
-          <div class="flow-node-name">S3 Download<br/>temp file</div>
-          <div class="flow-node-detail">Stream to /tmp/</div>
-        </div>
-      </div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-step">
-        <div class="flow-node node-ocr">
-          <div class="flow-node-icon">🔍</div>
-          <div class="flow-node-name">OCR +<br/>Chunk</div>
-          <div class="flow-node-detail">One chunk per page, min 50 chars</div>
-        </div>
-      </div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-step">
-        <div class="flow-node node-embed">
-          <div class="flow-node-icon">🧮</div>
-          <div class="flow-node-name">Batch<br/>Embed</div>
-          <div class="flow-node-detail">All page texts in one batch</div>
-        </div>
-      </div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-step">
-        <div class="flow-node node-qdrant">
-          <div class="flow-node-icon">🎯</div>
-          <div class="flow-node-name">Qdrant<br/>Upsert</div>
-          <div class="flow-node-detail">UUID per point + payload</div>
-        </div>
-      </div>
-      <div class="flow-arrow">→</div>
-      <div class="flow-step">
-        <div class="flow-node node-pg">
-          <div class="flow-node-icon">🐘</div>
-          <div class="flow-node-name">PG Insert<br/>+ Cleanup</div>
-          <div class="flow-node-detail">doc + chunk rows; delete /tmp</div>
         </div>
       </div>
     </div>
