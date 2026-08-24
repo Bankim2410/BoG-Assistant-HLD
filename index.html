@@ -737,7 +737,7 @@
         <div class="flow-node node-qdrant">
           <div class="flow-node-icon">🎯</div>
           <div class="flow-node-name">Qdrant</div>
-          <div class="flow-node-detail">Upsert vectors + payloads</div>
+          <div class="flow-node-detail">Insert vectors + payloads</div>
         </div>
       </div>
       <div class="flow-arrow">→</div>
@@ -862,7 +862,7 @@
         </div>
         <div class="pc-step">
           <div class="pc-step-num">4</div>
-          <div class="pc-step-text"><strong>PostgreSQL write</strong> — one <code>documents</code> row + N <code>chunks</code> rows after successful Qdrant upsert.</div>
+          <div class="pc-step-text"><strong>PostgreSQL write</strong> — one <code>documents</code> row + N <code>chunks</code> rows after successful Qdrant insertion.</div>
         </div>
       </div>
     </div>
@@ -1279,7 +1279,7 @@ score += sum(<span class="cv">5</span> <span class="ck">for</span> w <span class
       <div class="role-desc">Thin wrapper around QdrantClient. Handles all vector operations.</div>
       <ul class="role-bullets">
         <li>ensure_collection(): idempotent collection creation</li>
-        <li>upsert_points(): generates UUIDs, wraps PointStruct, batch upserts</li>
+        <li>insert_points(): generates UUIDs, wraps PointStruct, batch inserts</li>
         <li>similarity_search(): query_points() for client >= 1.7, search() fallback</li>
         <li>scroll_all(): bulk payload fetch for in-memory cache</li>
         <li>delete_by_ids(): remove points by UUID list</li>
