@@ -1292,7 +1292,7 @@ score += sum(<span class="cv">5</span> <span class="ck">for</span> w <span class
       </div>
       <ul class="role-bullets">
         <li>init_db(): CREATE TABLE IF NOT EXISTS for documents + chunks</li>
-        <li>insert_document(): upsert on filename conflict</li>
+        <li>insert_document(): insert on filename conflict</li>
         <li>document_exists(): deduplication check before processing</li>
         <li>insert_chunks(): batch insert chunk rows</li>
         <li>get_qdrant_ids_for_document(): lookup before deletion</li>
