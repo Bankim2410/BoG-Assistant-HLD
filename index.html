@@ -1307,9 +1307,6 @@ score += sum(<span class="cv">5</span> <span class="ck">for</span> w <span class
         <li>upload_bytes(): direct bytes upload (API upload path)</li>
         <li>upload_file(): local path upload (bulk script path)</li>
         <li>download_to_path(): stream to temp file for OCR</li>
-        <li>list_pdfs(): paginated listing under pdfs/ prefix</li>
-        <li>file_exists(): head_object check</li>
-        <li>presigned_url(): generate time-limited download URLs</li>
       </ul>
     </div>
     <div class="role-card">
@@ -1322,7 +1319,6 @@ score += sum(<span class="cv">5</span> <span class="ck">for</span> w <span class
         <li>Skips already-processed files via db.document_exists()</li>
         <li>Downloads each PDF to /tmp/, OCRs, embeds, cleans up</li>
         <li>Writes to Qdrant + PostgreSQL after successful processing</li>
-        <li>Progress bar via tqdm, incremental — safe to re-run</li>
       </ul>
     </div>
   </div>
