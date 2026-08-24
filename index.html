@@ -1236,10 +1236,6 @@ score += sum(<span class="cv">5</span> <span class="ck">for</span> w <span class
     </div>
 
   </div>
-
-  <div class="callout callout-info">
-    <strong>Delete cascade:</strong> Deleting a document via <code>DELETE /documents/{id}</code> removes the Qdrant points by UUID list, then deletes the PostgreSQL <code>documents</code> row (which cascades to <code>chunks</code>). The S3 object is intentionally preserved as a backup — call <code>s3_storage.delete_file(filename)</code> manually if permanent removal is needed.
-  </div>
 </section>
 
 <!-- ── SECTION 7: COMPONENTS ────────────────────────── -->
